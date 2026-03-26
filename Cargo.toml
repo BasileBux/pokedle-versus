@@ -1,0 +1,11 @@
+[package]
+name = "pokedle-versus"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+reqwest = "0.13.2"
+serde = "1.0.228"
+serde_json = "1.0.149"
+sqlx = "0.8.6"
+tokio = "1.50.0"
