@@ -1,4 +1,7 @@
+use serde::{Deserialize, Serialize};
+
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum PokemonType {
     Normal = 1,
     Fighting = 2,
@@ -81,6 +84,7 @@ impl TryFrom<u32> for PokemonType {
 
 // Hard coded values for Pokemon colors based on PokeAPI data
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum PokemonColor {
     Black = 1,
     Blue = 2,
@@ -94,8 +98,8 @@ pub enum PokemonColor {
     Yellow = 10,
 }
 
-#[derive(Debug)]
-pub struct UnknownValue(u32);
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UnknownValue(pub u32);
 
 impl TryFrom<u32> for PokemonColor {
     type Error = UnknownValue;
@@ -118,6 +122,7 @@ impl TryFrom<u32> for PokemonColor {
 }
 
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum PokemonHabitat {
     Cave = 1,
     Forest = 2,
@@ -128,6 +133,7 @@ pub enum PokemonHabitat {
     Sea = 7,
     Urban = 8,
     WatersEdge = 9,
+    Other = 10,
 }
 
 impl TryFrom<u32> for PokemonHabitat {
@@ -144,6 +150,7 @@ impl TryFrom<u32> for PokemonHabitat {
             7 => Ok(PokemonHabitat::Sea),
             8 => Ok(PokemonHabitat::Urban),
             9 => Ok(PokemonHabitat::WatersEdge),
+            10 => Ok(PokemonHabitat::Other),
             _ => Err(UnknownValue(v)),
         }
     }
@@ -167,10 +174,12 @@ impl PokemonColor {
 }
 
 // TODO: align better
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pokemon {
     pub name: String,
     pub french_name: String,
-    pub id: u32,
+    pub species_id: u32,
+    pub pokemon_id: u32,
     pub evolution_chain_id: u32,
     pub national_pokedex: u32,
     pub height: u32,
@@ -180,6 +189,7 @@ pub struct Pokemon {
     pub color: PokemonColor,
     pub evolution_stage: u8,
     pub fully_evolved: bool,
+    pub is_baby: bool,
     pub habitat: PokemonHabitat,
     pub generation: u8,
 }
