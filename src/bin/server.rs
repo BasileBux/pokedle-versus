@@ -110,9 +110,7 @@ async fn handle_socket(
         if let Some(room) = state.rooms.get(&room_id) {
             if let Some(client_tx) = room.clients.get(&player_id) {
                 client_tx
-                    .send(Message::Text(
-                        format!("Echo: {:?} - uuid: {}", msg, player_id).into(),
-                    ))
+                    .send(Message::Text(format!("{}", msg.to_text().unwrap()).into()))
                     .ok();
             }
         }
@@ -123,3 +121,4 @@ async fn handle_socket(
         room.clients.remove(&player_id);
     }
 }
+
