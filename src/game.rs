@@ -25,6 +25,7 @@ pub enum MultiComparison {
     NotEqual,
 }
 
+// TODO: Also add the actual stats of the guessed pokemon
 pub struct Guess {
     height: NumberComparison,
     weight: NumberComparison,
@@ -67,6 +68,34 @@ impl Room {
         self.guesses.clear();
         self.secret_pokemon = 0; // TODO: generate random pokemon
         self.generations = generations;
+    }
+
+    pub fn broadcast(&self, message: Message) {
+        for client in self.clients.iter() {
+            let _ = client.value().send(message.clone());
+        }
+    }
+
+    pub fn add_to_player_list(&self, player_id: Uuid) {
+        self.broadcast(Message::Text(
+            serde_json::json!({
+                "type": "player_joined",
+                "player_id": player_id.to_string(),
+            })
+            .to_string()
+            .into(),
+        ));
+    }
+
+    pub fn remove_from_player_list(&self, player_id: Uuid) {
+        self.broadcast(Message::Text(
+            serde_json::json!({
+                "type": "player_left",
+                "player_id": player_id.to_string(),
+            })
+            .to_string()
+            .into(),
+        ));
     }
 }
 

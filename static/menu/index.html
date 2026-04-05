@@ -9,8 +9,7 @@
     <p>Player ID: <span id="player-id">—</span></p>
     <p>Room ID: <span id="room-id">—</span></p>
     <button id="btn-new-room">New Room</button>
-    <button id="btn-send" disabled>Send "hello rust"</button>
-    <pre id="log"></pre>
+    <p id="player-list"></p>
 
     <script>
       let room_id = null;
@@ -20,12 +19,10 @@
       const playerIdEl = document.getElementById("player-id");
       const roomIdEl = document.getElementById("room-id");
       const btnSend = document.getElementById("btn-send");
-      const log = document.getElementById("log");
+      const playerList = document.getElementById("player-list");
       const btnNewRoom = document.getElementById("btn-new-room");
 
-      function appendLog(msg) {
-        log.textContent += msg + "\n";
-      }
+      const playerListArray = [];
 
       let ws = null;
 
@@ -48,7 +45,6 @@
           room_id = new URLSearchParams(window.location.search).get("room_id");
           let roomExists = await checkRoomId(room_id);
           if (roomExists) {
-            appendLog("Joining existing room: " + room_id);
             btnNewRoom.disabled = true;
             ws = new WebSocket(`ws://localhost:8080/ws?room_id=${room_id}`);
             setupWebSocket(ws);
@@ -62,13 +58,10 @@
       function setupWebSocket(ws) {
         ws.onopen = () => {
           status.textContent = "connected";
-          appendLog("WebSocket opened");
         };
 
         ws.onmessage = (event) => {
-          console.log("Received:", event.data);
           const data = JSON.parse(event.data);
-          appendLog("← " + JSON.stringify(data));
 
           if (data.type === "welcome") {
             playerId = data.player_id;
@@ -76,18 +69,37 @@
             btnSend.disabled = false;
             btnNewRoom.disabled = true;
           }
+
+          if (data.type === "player_list") {
+            playerListArray.length = 0;
+            data.players.forEach((p) => playerListArray.push(p));
+            playerList.textContent = "Players:\n" + playerListArray.join("\n");
+          }
+
+          if (data.type === "player_joined") {
+            if (!playerListArray.includes(data.player_id)) {
+              playerListArray.push(data.player_id);
+              playerList.textContent =
+                "Players:\n" + playerListArray.join("\n");
+            }
+          }
+
+          if (data.type === "player_left") {
+            const index = playerListArray.indexOf(data.player_id);
+            if (index !== -1) {
+              playerListArray.splice(index, 1);
+              playerList.textContent = "Players: " + playerListArray.join(", ");
+            }
+          }
         };
 
         ws.onclose = () => {
           status.textContent = "disconnected";
           btnSend.disabled = true;
           btnNewRoom.disabled = false;
-          appendLog("WebSocket closed");
         };
 
-        ws.onerror = (err) => {
-          appendLog("Error: " + err);
-        };
+        ws.onerror = (err) => {};
       }
 
       btnNewRoom.onclick = () => {
@@ -95,23 +107,12 @@
           .then((response) => response.json())
           .then((data) => {
             room_id = data.room_id;
-            appendLog("New room created: " + room_id);
             roomIdEl.textContent = room_id;
             history.replaceState(null, "", `?room_id=${room_id}`);
             ws = new WebSocket(`ws://localhost:8080/ws?room_id=${room_id}`);
             setupWebSocket(ws);
           });
       };
-
-      btnSend.onclick = () => {
-        const msg = JSON.stringify({
-          type: "chat",
-          room_id: room_id,
-          player_id: playerId,
-          text: "hello rust",
-        });
-        ws.send(msg);
-        appendLog("→ " + msg);
-      };
     </script>
   </body>
+</html>

@@ -16,6 +16,8 @@ use tokio::sync::mpsc;
 use tower_http::services::ServeDir;
 use uuid::Uuid;
 
+// TODO: When joining a room, we should ask a name or something which can differentiate players
+
 #[tokio::main]
 async fn main() {
     let state = Arc::new(AppState {
@@ -26,6 +28,7 @@ async fn main() {
         .route("/ws", any(ws_handler))
         .route("/new-room", get(new_room_handler))
         .route("/check-room", get(check_room_handler))
+        .route("/start-game", get(start_game_handler))
         .nest_service("/room", get_service(ServeDir::new("static/game")))
         .fallback_service(get_service(ServeDir::new("static/menu")))
         .with_state(state);
@@ -45,6 +48,16 @@ async fn new_room_handler(State(state): State<Arc<AppState>>) -> Response {
         .status(200)
         .header("Content-Type", "application/json")
         .body(format!(r#"{{"room_id": "{}"}}"#, room_id).into())
+        .unwrap()
+}
+
+// TODO: implement
+// WARNING: this should check if a game is not already started in the room
+async fn start_game_handler() -> Response {
+    Response::builder()
+        .status(200)
+        .header("Content-Type", "application/json")
+        .body(r#"{"message": "Not implemented yet"}"#.into())
         .unwrap()
 }
 
@@ -115,6 +128,30 @@ async fn handle_socket(
     ))
     .ok();
 
+    let player_list = state
+        .rooms
+        .get(&room_id)
+        .unwrap()
+        .clients
+        .iter()
+        .map(|entry| entry.key().to_string())
+        .collect::<Vec<_>>();
+    tx.send(Message::Text(
+        serde_json::json!({
+            "type": "player_list",
+            "players": player_list,
+        })
+        .to_string()
+        .into(),
+    ))
+    .ok();
+
+    state
+        .rooms
+        .get(&room_id)
+        .unwrap()
+        .add_to_player_list(player_id);
+
     tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if sender.send(msg).await.is_err() {
@@ -133,7 +170,12 @@ async fn handle_socket(
         }
     }
 
-    // Cleanup on disconnect
+    state
+        .rooms
+        .get(&room_id)
+        .unwrap()
+        .remove_from_player_list(player_id);
+
     // TODO: maybe not remove client immediately, but mark as disconnected and allow them to
     // reconnect for a short time?
     if let Some(room) = state.rooms.get(&room_id) {
