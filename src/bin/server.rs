@@ -7,7 +7,7 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
     response::{IntoResponse, Response},
-    routing::{any, get},
+    routing::{any, get, get_service},
 };
 use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
@@ -25,7 +25,9 @@ async fn main() {
     let app = Router::new()
         .route("/ws", any(ws_handler))
         .route("/new-room", get(new_room_handler))
-        .fallback_service(ServeDir::new("static"))
+        .route("/check-room", get(check_room_handler))
+        .nest_service("/room", get_service(ServeDir::new("static/game")))
+        .fallback_service(get_service(ServeDir::new("static/menu")))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
@@ -43,6 +45,27 @@ async fn new_room_handler(State(state): State<Arc<AppState>>) -> Response {
         .status(200)
         .header("Content-Type", "application/json")
         .body(format!(r#"{{"room_id": "{}"}}"#, room_id).into())
+        .unwrap()
+}
+
+async fn check_room_handler(
+    Query(params): Query<HashMap<String, String>>,
+    State(state): State<Arc<AppState>>,
+) -> Response {
+    if let Some(room_id_str) = params.get("room_id") {
+        if let Ok(room_id) = Uuid::from_str(room_id_str) {
+            let exists = state.rooms.contains_key(&room_id);
+            return Response::builder()
+                .status(200)
+                .header("Content-Type", "application/json")
+                .body(format!(r#"{{"exists": {}}}"#, exists).into())
+                .unwrap();
+        }
+    }
+    Response::builder()
+        .status(400)
+        .header("Content-Type", "application/json")
+        .body(r#"{"error": "Invalid room_id"}"#.into())
         .unwrap()
 }
 
