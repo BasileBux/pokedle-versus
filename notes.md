@@ -50,3 +50,7 @@ Now, the websocket connections are set and identified correctly. We will use web
 Player switch on either timeout or guess:
 A player switch sends a message to all clients in the game with the new player which turn it is and also maybe the guess.
 Communications during the game are rather trivial as there are two things that trigger a turn switch and then it just restarts by sending a message to everyone so that they all keep synced and know the same things.
+
+## Room creation
+
+Create new UUID

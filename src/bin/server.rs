@@ -7,49 +7,43 @@ use axum::{
         ws::{Message, WebSocket, WebSocketUpgrade},
     },
     response::{IntoResponse, Response},
-    routing::any,
+    routing::{any, get},
 };
 use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
+use pokedle_versus::game::*;
 use tokio::sync::mpsc;
 use tower_http::services::ServeDir;
 use uuid::Uuid;
-
-type ClientTx = mpsc::UnboundedSender<Message>;
-
-#[derive(Debug)]
-struct RoomState {
-    clients: DashMap<Uuid, ClientTx>,
-    whose_turn: Uuid,
-    guesses: Vec<u32>,
-}
-
-#[derive(Debug)]
-struct AppState {
-    rooms: DashMap<Uuid, RoomState>,
-}
 
 #[tokio::main]
 async fn main() {
     let state = Arc::new(AppState {
         rooms: DashMap::new(),
     });
-    state.rooms.insert(
-        Uuid::from_str("00000000-0000-0000-0000-000000000001").unwrap(),
-        RoomState {
-            clients: DashMap::new(),
-            whose_turn: Uuid::nil(),
-            guesses: Vec::new(),
-        },
-    );
 
     let app = Router::new()
         .route("/ws", any(ws_handler))
+        .route("/new-room", get(new_room_handler))
         .fallback_service(ServeDir::new("static"))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+// TODO: Add query params for game options (generations, etc)
+async fn new_room_handler(State(state): State<Arc<AppState>>) -> Response {
+    let room_id = Uuid::new_v4();
+    state
+        .rooms
+        .insert(room_id.clone(), Room::new(vec![1, 2, 3, 4, 5]));
+    println!("Created new room: {}", room_id);
+    Response::builder()
+        .status(200)
+        .header("Content-Type", "application/json")
+        .body(format!(r#"{{"room_id": "{}"}}"#, room_id).into())
+        .unwrap()
 }
 
 async fn ws_handler(
@@ -117,8 +111,11 @@ async fn handle_socket(
     }
 
     // Cleanup on disconnect
+    // TODO: maybe not remove client immediately, but mark as disconnected and allow them to
+    // reconnect for a short time?
     if let Some(room) = state.rooms.get(&room_id) {
         room.clients.remove(&player_id);
     }
-}
 
+    // TODO: remove room if all connected clients are gone
+}
