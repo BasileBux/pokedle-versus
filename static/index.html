@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Pokédle versus</title>
+  </head>
+  <body>
+    <p>Status: <span id="status">disconnected</span></p>
+    <p>Player ID: <span id="player-id">—</span></p>
+    <p>Room ID: <span id="room-id">—</span></p>
+    <button id="btn-new-room">New Room</button>
+    <p>Your sprite:</p>
+    <img id="player-sprite-img" src="sprites/1.png" alt="Your sprite" hidden />
+    <p>Players in room:</p>
+    <div id="player-list-container"></div>
+
+    <script>
+      let room_id = null;
+      let player_id = null;
+      let player_sprite_id = 0;
+
+      const status = document.getElementById("status");
+      const playerIdEl = document.getElementById("player-id");
+      const roomIdEl = document.getElementById("room-id");
+      const btnNewRoom = document.getElementById("btn-new-room");
+      const playerSprite = document.getElementById("player-sprite-img");
+      const playerListContainer = document.getElementById(
+        "player-list-container",
+      );
+
+      const playerListArray = [];
+
+      let ws = null;
+
+      async function checkRoomId(room_id) {
+        try {
+          const response = await fetch(`/check-room?room_id=${room_id}`);
+          const data = await response.json();
+          if (data.exists) {
+            return true;
+          } else {
+            return false;
+          }
+        } catch (err) {
+          return false;
+        }
+      }
+
+      async function init() {
+        if (window.location.search.includes("room_id=")) {
+          room_id = new URLSearchParams(window.location.search).get("room_id");
+          let roomExists = await checkRoomId(room_id);
+          console.log("Room exists:", roomExists);
+          if (roomExists) {
+            console.log("Joining room:", room_id);
+            btnNewRoom.disabled = true;
+            console.log(
+              "Checking for player_id in localStorage: ",
+              localStorage.getItem("player_id"),
+            );
+            local_player_id = localStorage.getItem("player_id");
+            if (local_player_id) {
+              ws = new WebSocket(
+                `ws://localhost:8080/ws?room_id=${room_id}&player_id=${local_player_id}`,
+              );
+            } else {
+              ws = new WebSocket(`ws://localhost:8080/ws?room_id=${room_id}`);
+            }
+            setupWebSocket(ws);
+            console.log("WebSocket setup complete");
+          } else {
+            history.replaceState(null, "", window.location.pathname);
+          }
+        }
+      }
+      init();
+
+      function setupWebSocket(ws) {
+        ws.onopen = () => {
+          status.textContent = "connected";
+        };
+
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+
+          if (data.type === "welcome") {
+            console.log("Received welcome message:", data);
+            player_id = data.player_id;
+            localStorage.setItem("player_id", player_id);
+            player_sprite_id = data.sprite_id;
+            playerSprite.src = `sprites/${player_sprite_id}.png`;
+            playerSprite.hidden = false;
+            playerIdEl.textContent = player_id;
+            btnNewRoom.disabled = true;
+
+            playerListArray.length = 0;
+            data.players_sprite_ids.forEach((p) => playerListArray.push(p));
+
+            playerListContainer.innerHTML = playerListArray
+              .map((id) => `<img src=sprites/${id}.png alt="Player ${id}">`)
+              .join("");
+          }
+
+          if (data.type === "player_joined") {
+            console.log("Player joined:", data);
+            if (!playerListArray.includes(data.sprite_id)) {
+              playerListArray.push(data.sprite_id);
+              const img = document.createElement("img");
+              img.src = `sprites/${data.sprite_id}.png`;
+              img.alt = `Player ${data.sprite_id}`;
+              playerListContainer.appendChild(img);
+            }
+          }
+
+          if (data.type === "player_left") {
+            console.log("Player left:", data);
+            const id = data.sprite_id;
+            const index = playerListArray.indexOf(id);
+            if (index !== -1) {
+              playerListArray.splice(index, 1);
+              const img = playerListContainer.querySelector(
+                `img[src="sprites/${id}.png"]`,
+              );
+              img?.remove();
+            }
+          }
+        };
+
+        ws.onclose = () => {
+          status.textContent = "disconnected";
+          btnNewRoom.disabled = false;
+        };
+
+        ws.onerror = (err) => {};
+      }
+
+      btnNewRoom.onclick = () => {
+        fetch("/new-room")
+          .then((response) => response.json())
+          .then((data) => {
+            room_id = data.room_id;
+            roomIdEl.textContent = room_id;
+            history.replaceState(null, "", `?room_id=${room_id}`);
+            ws = new WebSocket(`ws://localhost:8080/ws?room_id=${room_id}`);
+            setupWebSocket(ws);
+          });
+      };
+    </script>
+  </body>
+</html>

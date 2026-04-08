@@ -107,7 +107,7 @@ pub async fn build_generation(generation: u8) -> Result<(), reqwest::Error> {
             .as_str()
             .unwrap_or("");
         let sprite = get(sprite_url).await?.bytes().await?;
-        let sprite_path = format!("{}/gen_{}_sprites/{}.png", DATA_DIR, generation, pokemon_id);
+        let sprite_path = format!("{}/sprites/{}.png", DATA_DIR, pokemon_id);
         std::fs::write(sprite_path, sprite).unwrap();
 
         pokemons.insert(

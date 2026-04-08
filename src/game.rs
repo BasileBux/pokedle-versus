@@ -1,11 +1,30 @@
 use crate::pokemon::Pokemon;
 use dashmap::DashMap;
+use rand::seq::SliceRandom;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use axum::extract::ws::Message;
 
+const POKEMON_NUMBER: u16 = 1025;
+
 type ClientTx = mpsc::UnboundedSender<Message>;
+
+pub struct Player {
+    pub sprite_user_id: u16,
+    pub tx: ClientTx,
+    pub connected: bool,
+}
+
+impl Player {
+    pub fn new(tx: ClientTx, sprite_user_id: u16) -> Self {
+        Self {
+            tx,
+            sprite_user_id,
+            connected: true,
+        }
+    }
+}
 
 pub enum NumberComparison {
     Higher,
@@ -45,11 +64,12 @@ impl Guess {
 }
 
 pub struct Room {
-    pub clients: DashMap<Uuid, ClientTx>,
+    pub clients: DashMap<Uuid, Player>,
     pub whose_turn: Uuid,
     pub guesses: Vec<Guess>,
     pub secret_pokemon: u32,
     pub generations: Vec<u8>,
+    pub user_id_idx: u16, // Index for assigning user IDs, not the actual user ID
 }
 
 impl Room {
@@ -60,6 +80,7 @@ impl Room {
             guesses: Vec::new(),
             secret_pokemon: 0, // TODO: generate random pokemon
             generations,
+            user_id_idx: 0,
         }
     }
 
@@ -72,33 +93,64 @@ impl Room {
 
     pub fn broadcast(&self, message: Message) {
         for client in self.clients.iter() {
-            let _ = client.value().send(message.clone());
+            let _ = client.value().tx.send(message.clone());
         }
     }
 
-    pub fn add_to_player_list(&self, player_id: Uuid) {
+    pub fn add_to_player_list(&self, player_sprite_id: u16) {
         self.broadcast(Message::Text(
             serde_json::json!({
                 "type": "player_joined",
-                "player_id": player_id.to_string(),
+                "sprite_id": player_sprite_id,
             })
             .to_string()
             .into(),
         ));
     }
 
-    pub fn remove_from_player_list(&self, player_id: Uuid) {
+    pub fn remove_from_player_list(&self, player_sprite_id: u16) {
         self.broadcast(Message::Text(
             serde_json::json!({
                 "type": "player_left",
-                "player_id": player_id.to_string(),
+                "sprite_id": player_sprite_id,
             })
             .to_string()
             .into(),
         ));
+    }
+
+    pub fn count_connected_players(&self) -> usize {
+        self.clients
+            .iter()
+            .filter(|entry| entry.value().connected)
+            .count()
     }
 }
 
 pub struct AppState {
     pub rooms: DashMap<Uuid, Room>,
+    pub user_id_pool: Vec<u16>,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self {
+            rooms: DashMap::new(),
+            user_id_pool: {
+                let mut pool: Vec<u16> = (1..=POKEMON_NUMBER).collect();
+                pool.shuffle(&mut rand::rng());
+                pool
+            },
+        }
+    }
+
+    pub fn get_next_user_id(&self, room: &mut Room) -> u16 {
+        room.user_id_idx += 1;
+        room.user_id_idx %= self.user_id_pool.len() as u16;
+        self.user_id_pool[room.user_id_idx as usize]
+    }
+
+    pub fn randomize_user_id_pool(&mut self) {
+        self.user_id_pool.shuffle(&mut rand::rng());
+    }
 }
